@@ -13,6 +13,7 @@ import { OperationsPage } from '@/pages/OperationsPage';
 import { AgendaPage } from '@/pages/AgendaPage';
 import { AdministrationPage } from '@/pages/AdministrationPage';
 import { FinancePage } from '@/pages/FinancePage';
+import { KaderisasiPage } from '@/pages/KaderisasiPage';
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/agenda" element={<AgendaPage />} />
           <Route path="/administration" element={<AdministrationPage />} />
           <Route path="/finance" element={<FinancePage />} />
+          <Route path="/kaderisasi" element={<KaderisasiPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

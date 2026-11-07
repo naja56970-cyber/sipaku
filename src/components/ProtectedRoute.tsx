@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { canAccessRoute } from '@/lib/roles';
 import type { UserRole } from '@/types/user';
 
 type ProtectedRouteProps = {
@@ -29,7 +30,7 @@ export const ProtectedRoute = ({
     return <Navigate to="/waiting-approval" replace />;
   }
 
-  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+  if (allowedRoles.length > 0 && !canAccessRoute(user, allowedRoles)) {
     return <Navigate to="/dashboard" replace />;
   }
 

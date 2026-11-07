@@ -15,5 +15,6 @@ export const DEFAULT_ROLE: UserRole = 'anggota';
 
 export const canAccessRoute = (user: AppUser | null, allowedRoles: UserRole[]) => {
   if (!user) return false;
+  if (allowedRoles.length === 0) return true;
   return allowedRoles.includes(user.role);
 };

@@ -1,118 +1,133 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function profile(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
+    function approved() {
+      return signedIn() && profile(request.auth.uid).status == 'approved';
     }
-
-    function userData(uid) {
-      return get(/databases/$(database)/documents/users/$(uid));
+    function roleIs(roles) {
+      return approved() && profile(request.auth.uid).role in roles;
     }
-
-    function isSuperAdmin() {
-      return signedIn() && userData(request.auth.uid).data.role == 'super_admin';
+    function superAdmin() { return roleIs(['super_admin']); }
+    function leadership() {
+      return roleIs(['super_admin', 'ketua_ipnu', 'ketua_ippnu', 'wakil_ketua']);
     }
-
-    function isApprovedUser() {
-      return signedIn() && userData(request.auth.uid).data.status == 'approved';
+    function adminOrSecretary() {
+      return roleIs(['super_admin', 'sekretaris']);
+    }
+    function validPeriodReference() {
+      return request.resource.data.periodId is string
+        && exists(/databases/$(database)/documents/periods/$(request.resource.data.periodId));
     }
 
     match /users/{uid} {
-      allow create: if signedIn()
-        && request.auth.uid == uid
-        && request.resource.data.role == 'anggota'
-        && request.resource.data.status == 'pending';
-
-      allow read: if signedIn() && (
-        request.auth.uid == uid ||
-        isSuperAdmin() ||
-        (userData(request.auth.uid).data.role in ['ketua_ipnu', 'ketua_ippnu', 'wakil_ketua', 'sekretaris', 'bendahara', 'koordinator_departemen'])
-      );
-
-      allow update: if signedIn() && (
-        request.auth.uid == uid ||
-        isSuperAdmin()
-      );
-
-      allow delete: if false;
+      // User profiles are created and privileged fields changed only by trusted Functions.
+      allow create, delete: if false;
+      allow read: if signedIn() && (request.auth.uid == uid || superAdmin());
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
     }
 
+    // Public directory documents must contain no contact, student-ID, or other private fields.
+    match /public_people/{personId} {
+      allow read: if approved();
+      allow write: if superAdmin();
+    }
     match /people/{personId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin();
+      allow read: if superAdmin()
+        || (signedIn() && profile(request.auth.uid).personId == personId);
+      allow write: if superAdmin();
     }
 
     match /organizations/{orgId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin();
+      allow read: if approved();
+      allow write: if superAdmin() || adminOrSecretary();
     }
-
     match /periods/{periodId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin();
+      allow read: if approved();
+      allow write: if superAdmin() || adminOrSecretary();
     }
-
+    match /memberships/{membershipId} {
+      allow read: if superAdmin() || adminOrSecretary();
+      allow write: if superAdmin() || adminOrSecretary();
+    }
+    match /positions/{positionId} {
+      allow read: if approved();
+      allow write: if superAdmin() || adminOrSecretary();
+    }
     match /departments/{departmentId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin() || userData(request.auth.uid).data.role == 'sekretaris';
+      allow read: if approved();
+      allow write: if superAdmin() || adminOrSecretary();
     }
 
     match /programs/{programId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isApprovedUser() && (
-        isSuperAdmin() ||
-        userData(request.auth.uid).data.role in ['sekretaris', 'koordinator_departemen', 'ketua_ipnu', 'ketua_ippnu']
+      allow read: if approved();
+      allow create: if approved()
+        && request.resource.data.status == 'Rancangan'
+        && validPeriodReference()
+        && (superAdmin() || roleIs(['ketua_ipnu', 'ketua_ippnu', 'wakil_ketua', 'sekretaris', 'koordinator_departemen']));
+      allow update: if approved() && (
+        superAdmin()
+        || (roleIs(['ketua_ipnu', 'ketua_ippnu'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+        || roleIs(['sekretaris', 'koordinator_departemen'])
       );
+      allow delete: if superAdmin();
     }
-
     match /tasks/{taskId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isApprovedUser();
-    }
-
-    match /meetings/{meetingId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isApprovedUser();
-    }
-
-    match /attendance/{attendanceId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isApprovedUser();
+      allow read: if approved();
+      allow create, update: if approved() && (superAdmin() || roleIs(['ketua_ipnu', 'ketua_ippnu', 'wakil_ketua', 'sekretaris', 'koordinator_departemen']));
+      allow delete: if superAdmin();
     }
 
     match /agendas/{agendaId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isApprovedUser();
+      allow read: if approved();
+      allow create: if approved() && validPeriodReference()
+        && (superAdmin() || roleIs(['ketua_ipnu', 'ketua_ippnu', 'wakil_ketua', 'sekretaris', 'koordinator_departemen']));
+      allow update: if approved() && (superAdmin() || roleIs(['ketua_ipnu', 'ketua_ippnu', 'wakil_ketua', 'sekretaris', 'koordinator_departemen']));
+      allow delete: if superAdmin() || adminOrSecretary();
     }
-
+    match /attendance/{attendanceId} {
+      // Attendance is private: a member may read only their own record.
+      allow read: if superAdmin() || adminOrSecretary() || leadership()
+        || (approved() && resource.data.personUid == request.auth.uid);
+      allow create: if approved() && (superAdmin() || adminOrSecretary() || leadership());
+      allow update: if approved() && (superAdmin() || adminOrSecretary() || leadership());
+      allow delete: if superAdmin() || adminOrSecretary();
+    }
+    match /meetings/{meetingId} {
+      allow read: if approved();
+      allow create, update: if approved() && (superAdmin() || adminOrSecretary() || leadership());
+      allow delete: if superAdmin() || adminOrSecretary();
+    }
     match /letters/{letterId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isApprovedUser();
+      allow read: if approved() && (superAdmin() || adminOrSecretary());
+      allow create, update: if approved() && (superAdmin() || adminOrSecretary());
+      allow delete: if superAdmin();
     }
-
     match /transactions/{transactionId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin() || userData(request.auth.uid).data.role == 'bendahara';
+      allow read: if approved() && (superAdmin() || roleIs(['bendahara', 'ketua_ipnu', 'ketua_ippnu']));
+      // No hard delete; corrections should be recorded as reversal transactions.
+      allow create: if approved() && (superAdmin() || roleIs(['bendahara']));
+      allow update: if approved() && (superAdmin() || roleIs(['bendahara']));
+      allow delete: if false;
     }
-
     match /budgets/{budgetId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin() || userData(request.auth.uid).data.role == 'bendahara';
+      allow read: if approved() && (superAdmin() || roleIs(['bendahara', 'ketua_ipnu', 'ketua_ippnu']));
+      allow create, update: if approved() && (superAdmin() || roleIs(['bendahara']));
+      allow delete: if false;
     }
-
     match /activity_logs/{logId} {
-      allow read: if isSuperAdmin();
-      allow create, update, delete: if false;
-    }
-
-    match /system_settings/{settingId} {
-      allow read: if isApprovedUser() || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    match /{document=**} {
-      allow read: if false;
+      allow read: if superAdmin();
       allow write: if false;
+    }
+    match /system_settings/{settingId} {
+      allow read: if approved();
+      allow write: if superAdmin();
+    }
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -2,59 +2,37 @@
 
 Sistem Informasi dan Pengelolaan Administrasi Komisariat PK IPNU-IPPNU UNUGIRI.
 
-## Fase 2 - Fondasi aplikasi
+## Fondasi aplikasi
 
-Proyek ini adalah fondasi aman untuk SIPAKU berdasarkan keputusan berikut:
+- React + TypeScript + Vite + Tailwind CSS
+- Firebase Authentication, Cloud Firestore, Storage, Functions, Hosting
+- Pendaftaran akun dengan email terverifikasi dan status `pending`
+- Role dan status akun ditetapkan backend; akun Super Admin dibuat hanya melalui proses bootstrap tepercaya
+- Profil pribadi dipisahkan dari direktori ringkas (`public_people`)
+- Data organisasi ditautkan ke periode (`periodId`) agar riwayat masa khidmat tetap tersimpan
+- Modul awal: profil organisasi, data anggota, periode/kepengurusan, program/tugas, agenda dan presensi pribadi
 
-- Super Admin username: `PK IPNU IPPNU UNUGIRI`
-- Ketua IPNU dan Ketua IPPNU menangani persetujuan program kerja
-- Super Admin berwenang penuh atas sistem
-- Data anggota pribadi tidak dibuka ke user umum
-- Data per periode tetap tersimpan dan tidak ditimpa
-- Satu organisasi aktif: PK IPNU-IPPNU UNUGIRI
+## Setup lokal
 
-## Stack
+1. Salin `.env.example` menjadi `.env` lalu isi konfigurasi Firebase client.
+2. Isi project ID pada `.firebaserc`.
+3. Install dependency frontend: `npm install`.
+4. Install dependency functions: `cd functions && npm install`.
+5. Jalankan frontend: `npm run dev`.
 
-- React + TypeScript
-- Vite
-- Tailwind CSS
-- Firebase Authentication
-- Cloud Firestore
-- Firebase Storage
-- Firebase Hosting
-- Firebase Rules
-- Cloud Functions
+Jangan pernah menyimpan service account atau private key di repo. Untuk deployment, gunakan Firebase CLI dan kredensial developer tepercaya.
 
-## Menjalankan aplikasi
+## Bootstrap Super Admin
 
-1. Salin `.env.example` menjadi `.env`
-2. Isi konfigurasi Firebase
-3. Install dependency:
+Tidak ada callable Function publik untuk membuat Super Admin. Buat akun Auth secara manual di Firebase Console atau melalui proses admin tepercaya, verifikasi alamat email, lalu jalankan script bootstrap lokal pada lingkungan tepercaya dengan Application Default Credentials dan variabel:
 
-```bash
-npm install
-```
+- `BOOTSTRAP_ADMIN_UID`: UID akun Auth yang sudah dibuat
+- `BOOTSTRAP_ADMIN_USERNAME`: harus tepat `PK IPNU IPPNU UNUGIRI`
 
-4. Jalankan:
+Jangan masukkan kredensial atau password ke source code. Setelah serah terima, ubah password melalui alur Firebase Authentication.
 
-```bash
-npm run dev
-```
+## Perhatian keamanan dan status
 
-## Struktur awal
+Rules melarang akses umum ke profil pribadi; direktori yang dapat dilihat hanya `public_people` dan harus berisi field non-sensitif. Firebase Rules tidak menyaring field individual pada hasil dokumen, sehingga jangan menaruh NIM/kontak di dokumen direktori.
 
-- `src/` - aplikasi frontend
-- `functions/` - Cloud Functions
-- `firestore.rules` - aturan Firestore
-- `storage.rules` - aturan Storage
-- `firebase.json` - konfigurasi Firebase
-
-## Catatan keamanan
-
-- Admin SDK tidak pernah dipasang di frontend
-- Role dan status akun tidak boleh diubah dari aplikasi klien
-- Operasi sensitive dikerjakan melalui backend/Cloud Function
-
-## Status
-
-Fase 2 sedang dibangun dan masih dalam tahap fondasi. Fase 3 akan berlanjut ke data organisasi, struktur, dan modul operasional.
+Konfigurasi dan kode ini adalah fondasi awal, belum berarti deployment atau audit keamanan telah dilakukan. Jalankan Firebase Emulator Suite dan pengujian build/rules sebelum produksi.

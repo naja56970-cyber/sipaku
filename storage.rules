@@ -1,34 +1,36 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function signedIn() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function profile(uid) {
+      return firestore.get(/databases/(default)/documents/users/$(uid)).data;
     }
-
-    function userData(uid) {
-      return firestore.get(/databases/(default)/documents/users/$(uid));
+    function approved() {
+      return signedIn() && profile(request.auth.uid).status == 'approved';
     }
-
-    function isSuperAdmin() {
-      return signedIn() && userData(request.auth.uid).data.role == 'super_admin';
+    function privileged() {
+      return approved() && profile(request.auth.uid).role in [
+        'super_admin', 'sekretaris', 'bendahara', 'ketua_ipnu', 'ketua_ippnu', 'wakil_ketua'
+      ];
     }
 
     match /profiles/{userId}/{fileName} {
-      allow read: if signedIn() && (request.auth.uid == userId || isSuperAdmin());
-      allow write: if signedIn()
-        && request.auth.uid == userId
+      allow read: if signedIn() && (request.auth.uid == userId || privileged());
+      allow write: if signedIn() && request.auth.uid == userId
         && request.resource.size < 2 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
-
-    match /documents/{allPaths=**} {
-      allow read: if signedIn() && (isSuperAdmin() || userData(request.auth.uid).data.status == 'approved');
-      allow write: if signedIn() && (isSuperAdmin() || userData(request.auth.uid).data.role in ['sekretaris', 'bendahara', 'koordinator_departemen']);
+    match /documents/{periodId}/{allPaths=**} {
+      allow read: if approved();
+      allow write: if privileged()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('(application/pdf|image/(jpeg|png|webp))');
     }
-
+    match /private/{userId}/{allPaths=**} {
+      allow read, write: if signedIn() && (request.auth.uid == userId || profile(request.auth.uid).role == 'super_admin');
+    }
     match /{allPaths=**} {
-      allow read: if false;
-      allow write: if false;
+      allow read, write: if false;
     }
   }
 }

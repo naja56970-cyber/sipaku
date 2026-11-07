@@ -9,6 +9,8 @@ import { OrganizationProfilePage } from '@/pages/OrganizationProfilePage';
 import { MembersPage } from '@/pages/MembersPage';
 import { GovernancePage } from '@/pages/GovernancePage';
 import { GovernanceSetupPage } from '@/pages/GovernanceSetupPage';
+import { OperationsPage } from '@/pages/OperationsPage';
+import { AgendaPage } from '@/pages/AgendaPage';
 
 export default function App() {
   return (
@@ -18,18 +20,17 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
-
         <Route element={<ProtectedRoute requireApproved />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/organization" element={<OrganizationProfilePage />} />
           <Route path="/members" element={<MembersPage />} />
           <Route path="/governance" element={<GovernancePage />} />
           <Route path="/governance-setup" element={<GovernanceSetupPage />} />
+          <Route path="/operations" element={<OperationsPage />} />
+          <Route path="/agenda" element={<AgendaPage />} />
         </Route>
-
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-
       <Toaster position="top-right" richColors />
     </>
   );

@@ -2,67 +2,93 @@ import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
 admin.initializeApp();
+const db = admin.firestore();
+const ALLOWED_ROLES = [
+  'super_admin', 'ketua_ipnu', 'ketua_ippnu', 'wakil_ketua',
+  'sekretaris', 'bendahara', 'koordinator_departemen', 'anggota',
+] as const;
+type Role = (typeof ALLOWED_ROLES)[number];
 
-export const bootstrapSuperAdmin = onCall(async (request) => {
-  const uid = request.data?.uid;
-  const username = request.data?.username;
-
-  if (!uid || !username) {
-    throw new HttpsError('invalid-argument', 'uid dan username wajib diisi.');
+async function requireSuperAdmin(uid: string | undefined) {
+  if (!uid) throw new HttpsError('unauthenticated', 'Silakan login terlebih dahulu.');
+  const snapshot = await db.collection('users').doc(uid).get();
+  if (!snapshot.exists || snapshot.data()?.status !== 'approved' || snapshot.data()?.role !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Hanya Super Admin yang dapat melakukan tindakan ini.');
   }
+}
 
-  const db = admin.firestore();
+export const ensurePendingProfile = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Silakan login terlebih dahulu.');
+  if (request.auth?.token.email_verified !== true) {
+    throw new HttpsError('failed-precondition', 'Verifikasi email sebelum melanjutkan.');
+  }
+  const authUser = await admin.auth().getUser(uid);
   const userRef = db.collection('users').doc(uid);
+  const existing = await userRef.get();
+  if (existing.exists) return { status: existing.data()?.status ?? 'pending' };
 
-  await userRef.set(
-    {
-      uid,
-      username,
-      email: request.data?.email ?? '',
-      role: 'super_admin',
-      status: 'approved',
-      organizationId: 'default',
-      approvedBy: 'system-bootstrap',
-      approvedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    },
-    { merge: true },
-  );
-
-  return {
-    ok: true,
-    message: 'Super Admin berhasil dibuat melalui bootstrap aman.',
-  };
+  await userRef.create({
+    uid,
+    email: authUser.email ?? '',
+    displayName: authUser.displayName ?? '',
+    role: 'anggota',
+    status: 'pending',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { status: 'pending' };
 });
 
+// Bootstrap is intentionally a trusted CLI operation, never a public callable function.
 export const approveUserRegistration = onCall(async (request) => {
-  const uid = request.data?.uid;
-  const role = request.data?.role;
   const approverUid = request.auth?.uid;
-
-  if (!uid || !role) {
-    throw new HttpsError('invalid-argument', 'uid dan role wajib diisi.');
+  await requireSuperAdmin(approverUid);
+  const uid = request.data?.uid;
+  const role = request.data?.role as Role;
+  if (typeof uid !== 'string' || !ALLOWED_ROLES.includes(role)) {
+    throw new HttpsError('invalid-argument', 'UID atau role tidak valid.');
   }
+  if (role === 'super_admin') throw new HttpsError('invalid-argument', 'Super Admin tidak dapat ditetapkan melalui persetujuan registrasi.');
 
-  const db = admin.firestore();
-  const currentUser = await db.collection('users').doc(approverUid ?? '').get();
-
-  if (!approverUid || !currentUser.exists || currentUser.data()?.role !== 'super_admin') {
-    throw new HttpsError('permission-denied', 'Hanya Super Admin yang dapat menyetujui user.');
+  const targetRef = db.collection('users').doc(uid);
+  const target = await targetRef.get();
+  if (!target.exists || target.data()?.status !== 'pending') {
+    throw new HttpsError('failed-precondition', 'Akun tidak ditemukan atau bukan berstatus pending.');
   }
-
-  const userRef = db.collection('users').doc(uid);
-  await userRef.set(
-    {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  await db.runTransaction(async (tx) => {
+    tx.update(targetRef, { role, status: 'approved', approvedBy: approverUid, approvedAt: now, updatedAt: now });
+    tx.create(db.collection('activity_logs').doc(), {
+      actorUid: approverUid,
+      action: 'user.approved',
+      targetUid: uid,
       role,
-      status: 'approved',
-      approvedBy: approverUid,
-      approvedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true },
-  );
+      createdAt: now,
+    });
+  });
+  return { ok: true };
+});
 
-  return { ok: true, message: 'User berhasil disetujui.' };
+export const rejectUserRegistration = onCall(async (request) => {
+  const approverUid = request.auth?.uid;
+  await requireSuperAdmin(approverUid);
+  const uid = request.data?.uid;
+  if (typeof uid !== 'string') throw new HttpsError('invalid-argument', 'UID tidak valid.');
+  const targetRef = db.collection('users').doc(uid);
+  const target = await targetRef.get();
+  if (!target.exists || target.data()?.status !== 'pending') {
+    throw new HttpsError('failed-precondition', 'Akun tidak ditemukan atau bukan berstatus pending.');
+  }
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  await db.runTransaction(async (tx) => {
+    tx.update(targetRef, { status: 'rejected', rejectedBy: approverUid, rejectedAt: now, updatedAt: now });
+    tx.create(db.collection('activity_logs').doc(), {
+      actorUid: approverUid,
+      action: 'user.rejected',
+      targetUid: uid,
+      createdAt: now,
+    });
+  });
+  return { ok: true };
 });

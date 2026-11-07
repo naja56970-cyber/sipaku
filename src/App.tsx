@@ -7,6 +7,8 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { WaitingApprovalPage } from '@/pages/WaitingApprovalPage';
 import { OrganizationProfilePage } from '@/pages/OrganizationProfilePage';
 import { MembersPage } from '@/pages/MembersPage';
+import { GovernancePage } from '@/pages/GovernancePage';
+import { GovernanceSetupPage } from '@/pages/GovernanceSetupPage';
 
 export default function App() {
   return (
@@ -21,6 +23,8 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/organization" element={<OrganizationProfilePage />} />
           <Route path="/members" element={<MembersPage />} />
+          <Route path="/governance" element={<GovernancePage />} />
+          <Route path="/governance-setup" element={<GovernanceSetupPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

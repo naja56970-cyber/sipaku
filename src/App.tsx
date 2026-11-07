@@ -5,6 +5,8 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { WaitingApprovalPage } from '@/pages/WaitingApprovalPage';
+import { OrganizationProfilePage } from '@/pages/OrganizationProfilePage';
+import { MembersPage } from '@/pages/MembersPage';
 
 export default function App() {
   return (
@@ -17,6 +19,8 @@ export default function App() {
 
         <Route element={<ProtectedRoute requireApproved />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/organization" element={<OrganizationProfilePage />} />
+          <Route path="/members" element={<MembersPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -17,6 +17,35 @@ async function requireSuperAdmin(uid: string | undefined) {
   }
 }
 
+async function requireFinanceRole(uid: string | undefined) {
+  if (!uid) throw new HttpsError('unauthenticated', 'Silakan login terlebih dahulu.');
+  const snapshot = await db.collection('users').doc(uid).get();
+  if (!snapshot.exists || snapshot.data()?.status !== 'approved' || !['super_admin', 'bendahara'].includes(snapshot.data()?.role)) {
+    throw new HttpsError('permission-denied', 'Hanya Bendahara atau Super Admin yang dapat melakukan tindakan ini.');
+  }
+}
+
+function boundedString(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.trim().length > maxLength) {
+    throw new HttpsError('invalid-argument', `${field} wajib diisi dan maksimal ${maxLength} karakter.`);
+  }
+  return value.trim();
+}
+
+function validAmount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new HttpsError('invalid-argument', 'Nominal harus bilangan bulat positif yang valid.');
+  }
+  return value;
+}
+
+async function validPeriod(periodId: unknown): Promise<string> {
+  const id = boundedString(periodId, 'periodId', 128);
+  const snapshot = await db.collection('periods').doc(id).get();
+  if (!snapshot.exists) throw new HttpsError('failed-precondition', 'Periode tidak ditemukan.');
+  return id;
+}
+
 export const ensurePendingProfile = onCall(async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Silakan login terlebih dahulu.');
@@ -50,7 +79,6 @@ export const approveUserRegistration = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'UID atau role tidak valid.');
   }
   if (role === 'super_admin') throw new HttpsError('invalid-argument', 'Super Admin tidak dapat ditetapkan melalui persetujuan registrasi.');
-
   const targetRef = db.collection('users').doc(uid);
   const target = await targetRef.get();
   if (!target.exists || target.data()?.status !== 'pending') {
@@ -59,13 +87,7 @@ export const approveUserRegistration = onCall(async (request) => {
   const now = admin.firestore.FieldValue.serverTimestamp();
   await db.runTransaction(async (tx) => {
     tx.update(targetRef, { role, status: 'approved', approvedBy: approverUid, approvedAt: now, updatedAt: now });
-    tx.create(db.collection('activity_logs').doc(), {
-      actorUid: approverUid,
-      action: 'user.approved',
-      targetUid: uid,
-      role,
-      createdAt: now,
-    });
+    tx.create(db.collection('activity_logs').doc(), { actorUid: approverUid, action: 'user.approved', targetUid: uid, role, createdAt: now });
   });
   return { ok: true };
 });
@@ -83,12 +105,46 @@ export const rejectUserRegistration = onCall(async (request) => {
   const now = admin.firestore.FieldValue.serverTimestamp();
   await db.runTransaction(async (tx) => {
     tx.update(targetRef, { status: 'rejected', rejectedBy: approverUid, rejectedAt: now, updatedAt: now });
-    tx.create(db.collection('activity_logs').doc(), {
-      actorUid: approverUid,
-      action: 'user.rejected',
-      targetUid: uid,
-      createdAt: now,
-    });
+    tx.create(db.collection('activity_logs').doc(), { actorUid: approverUid, action: 'user.rejected', targetUid: uid, createdAt: now });
   });
   return { ok: true };
+});
+
+export const createFinanceEntry = onCall(async (request) => {
+  const actorUid = request.auth?.uid;
+  await requireFinanceRole(actorUid);
+  if (request.auth?.token.email_verified !== true) throw new HttpsError('failed-precondition', 'Email belum diverifikasi.');
+  const periodId = await validPeriod(request.data?.periodId);
+  const description = boundedString(request.data?.description, 'description', 160);
+  const category = boundedString(request.data?.category, 'category', 80);
+  const direction = request.data?.direction;
+  if (direction !== 'income' && direction !== 'expense') throw new HttpsError('invalid-argument', 'Jenis transaksi tidak valid.');
+  const amount = validAmount(request.data?.amount);
+  const occurredOn = boundedString(request.data?.occurredOn, 'occurredOn', 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredOn)) throw new HttpsError('invalid-argument', 'Tanggal transaksi tidak valid.');
+
+  const transactionRef = db.collection('transactions').doc();
+  const auditRef = db.collection('activity_logs').doc();
+  const timestamp = admin.firestore.FieldValue.serverTimestamp();
+  await db.runTransaction(async (tx) => {
+    tx.create(transactionRef, { periodId, description, category, direction, amount, occurredOn, createdBy: actorUid, createdAt: timestamp });
+    tx.create(auditRef, { actorUid, action: 'finance.transaction.created', targetId: transactionRef.id, periodId, direction, amount, createdAt: timestamp });
+  });
+  return { id: transactionRef.id };
+});
+
+export const createBudget = onCall(async (request) => {
+  const actorUid = request.auth?.uid;
+  await requireFinanceRole(actorUid);
+  const periodId = await validPeriod(request.data?.periodId);
+  const title = boundedString(request.data?.title, 'title', 120);
+  const amount = validAmount(request.data?.amount);
+  const budgetRef = db.collection('budgets').doc();
+  const auditRef = db.collection('activity_logs').doc();
+  const timestamp = admin.firestore.FieldValue.serverTimestamp();
+  await db.runTransaction(async (tx) => {
+    tx.create(budgetRef, { periodId, title, amount, createdBy: actorUid, createdAt: timestamp, updatedAt: timestamp });
+    tx.create(auditRef, { actorUid, action: 'finance.budget.created', targetId: budgetRef.id, periodId, amount, createdAt: timestamp });
+  });
+  return { id: budgetRef.id };
 });

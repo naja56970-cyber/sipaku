@@ -11,6 +11,8 @@ import { GovernancePage } from '@/pages/GovernancePage';
 import { GovernanceSetupPage } from '@/pages/GovernanceSetupPage';
 import { OperationsPage } from '@/pages/OperationsPage';
 import { AgendaPage } from '@/pages/AgendaPage';
+import { AdministrationPage } from '@/pages/AdministrationPage';
+import { FinancePage } from '@/pages/FinancePage';
 
 export default function App() {
   return (
@@ -28,6 +30,8 @@ export default function App() {
           <Route path="/governance-setup" element={<GovernanceSetupPage />} />
           <Route path="/operations" element={<OperationsPage />} />
           <Route path="/agenda" element={<AgendaPage />} />
+          <Route path="/administration" element={<AdministrationPage />} />
+          <Route path="/finance" element={<FinancePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

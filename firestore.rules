@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && userData(request.auth.uid).data.role == 'super_admin';
+    }
+
+    function isApprovedUser() {
+      return signedIn() && userData(request.auth.uid).data.status == 'approved';
+    }
+
+    match /users/{uid} {
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'anggota'
+        && request.resource.data.status == 'pending';
+
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        isSuperAdmin() ||
+        (userData(request.auth.uid).data.role in ['ketua_ipnu', 'ketua_ippnu', 'wakil_ketua', 'sekretaris', 'bendahara', 'koordinator_departemen'])
+      );
+
+      allow update: if signedIn() && (
+        request.auth.uid == uid ||
+        isSuperAdmin()
+      );
+
+      allow delete: if false;
+    }
+
+    match /people/{personId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /organizations/{orgId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /periods/{periodId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /departments/{departmentId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin() || userData(request.auth.uid).data.role == 'sekretaris';
+    }
+
+    match /programs/{programId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isApprovedUser() && (
+        isSuperAdmin() ||
+        userData(request.auth.uid).data.role in ['sekretaris', 'koordinator_departemen', 'ketua_ipnu', 'ketua_ippnu']
+      );
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isApprovedUser();
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isApprovedUser();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isApprovedUser();
+    }
+
+    match /agendas/{agendaId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isApprovedUser();
+    }
+
+    match /letters/{letterId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isApprovedUser();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin() || userData(request.auth.uid).data.role == 'bendahara';
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin() || userData(request.auth.uid).data.role == 'bendahara';
+    }
+
+    match /activity_logs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /system_settings/{settingId} {
+      allow read: if isApprovedUser() || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /{document=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}

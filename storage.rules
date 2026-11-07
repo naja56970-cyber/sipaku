@@ -1,0 +1,34 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userData(uid) {
+      return firestore.get(/databases/(default)/documents/users/$(uid));
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && userData(request.auth.uid).data.role == 'super_admin';
+    }
+
+    match /profiles/{userId}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow write: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /documents/{allPaths=**} {
+      allow read: if signedIn() && (isSuperAdmin() || userData(request.auth.uid).data.status == 'approved');
+      allow write: if signedIn() && (isSuperAdmin() || userData(request.auth.uid).data.role in ['sekretaris', 'bendahara', 'koordinator_departemen']);
+    }
+
+    match /{allPaths=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}

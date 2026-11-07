@@ -14,6 +14,7 @@ import { AgendaPage } from '@/pages/AgendaPage';
 import { AdministrationPage } from '@/pages/AdministrationPage';
 import { FinancePage } from '@/pages/FinancePage';
 import { KaderisasiPage } from '@/pages/KaderisasiPage';
+import { EvaluationPage } from '@/pages/EvaluationPage';
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/administration" element={<AdministrationPage />} />
           <Route path="/finance" element={<FinancePage />} />
           <Route path="/kaderisasi" element={<KaderisasiPage />} />
+          <Route path="/evaluations" element={<EvaluationPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

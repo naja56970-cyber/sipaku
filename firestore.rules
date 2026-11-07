@@ -1,5 +1,4 @@
-    match /evaluations/{evaluationId} {
-      allow read: if approved();
-      // Evaluation creation is validated and audited by a trusted Cloud Function.
+    match /activity_logs/{logId} {
+      allow read: if isSuperAdmin() || userData(request.auth.uid).data.role == 'sekretaris' || userData(request.auth.uid).data.role == 'bendahara';
       allow create, update, delete: if false;
     }

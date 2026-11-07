@@ -15,6 +15,7 @@ import { AdministrationPage } from '@/pages/AdministrationPage';
 import { FinancePage } from '@/pages/FinancePage';
 import { KaderisasiPage } from '@/pages/KaderisasiPage';
 import { EvaluationPage } from '@/pages/EvaluationPage';
+import { AuditLogPage } from '@/pages/AuditLogPage';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
+
         <Route element={<ProtectedRoute requireApproved />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/organization" element={<OrganizationProfilePage />} />
@@ -36,9 +38,12 @@ export default function App() {
           <Route path="/finance" element={<FinancePage />} />
           <Route path="/kaderisasi" element={<KaderisasiPage />} />
           <Route path="/evaluations" element={<EvaluationPage />} />
+          <Route path="/audit-log" element={<AuditLogPage />} />
         </Route>
+
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+
       <Toaster position="top-right" richColors />
     </>
   );
